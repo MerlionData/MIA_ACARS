@@ -1,0 +1,264 @@
+<?xml version="1.0"?>
+
+<PropertyList>
+	<name>file-pirep</name>
+	<modal>false</modal>
+	<layout>vbox</layout>
+	<resizable>false</resizable>
+	<default-padding>3</default-padding>
+	
+	<color>
+        <red type="float">0.1</red>
+        <green type="float">0.1</green>
+        <blue type="float">0.1</blue>
+        <alpha type="float">0.7</alpha>
+    </color>
+
+	<group>
+		<layout>hbox</layout>
+		<default-padding>1</default-padding>
+
+		<empty>
+		  <stretch>true</stretch>
+		</empty>
+
+		<text>
+		  <label>Merlion Virtual Airlines | File Pilot Report</label>
+		</text>
+
+		<empty>
+		  <stretch>true</stretch>
+		</empty>
+
+		<button>
+		  <legend/>
+		  <key>Esc</key>
+		  <pref-width>16</pref-width>
+		  <pref-height>16</pref-height>
+		  <border>2</border>
+		  <binding>
+			<command>dialog-close</command>
+		  </binding>
+		</button>
+	</group>
+
+	<hrule/>
+
+	<canvas>
+		<name>merlion-pirep</name>
+		<valign>fill</valign>
+		<halign>fill</halign>
+		<stretch>true</stretch>
+		<pref-width>600</pref-width>
+		<pref-height>400</pref-height>
+		<nasal>      
+		<load><![CDATA[
+		
+		var pirep = canvas.get(cmdarg());
+		var root = pirep.createGroup();
+		var contents = pirep.createGroup();
+		
+		var createText = func(group, text, size) {
+		var m = group.createChild("text")
+						.setText(text)
+						.setFontSize(size)
+						.setFont("Helvetica.txf")
+						.setColor(1,1,1);
+			return m;
+		};
+	
+		var createFplnText = func(group, text, size) {
+			var m = group.createChild("text")
+						.setText(text)
+						.setFontSize(size)
+						.setFont("Helvetica.txf")
+						.setColor(0,0,0);
+			return m;
+		};
+	
+		var drawLine = func(group, startx, starty, endx, endy, color, width) {
+			var m = group.createChild("path")
+						.setColor(color)
+						.setStrokeLineWidth(width)
+						.moveTo(startx,starty)
+						.lineTo(endx, endy);
+			return m;
+		};
+			
+		pirep.setColorBackground(0.1,0.1,0.1,0.7);
+	
+		var banner = root.createChild("image")
+			.setFile("Textures/Splash1.png")
+			.setSize(600,75)
+			.setTranslation(2,1);
+			
+		settimer(func() {			
+			banner.setFile("gui/merlion/banner-pirep.png");
+		},0.25);
+			
+		if(getprop("/acars/server-response/auth/code") != 1) {
+		
+			# No Authentication
+			
+			var noauthText = contents.createChild("text")
+				.setText("You must be logged in to continue, please login and re-open ACARS Portal...")
+				.setFontSize(16)
+				.setFont("Helvetica.txf")
+				.setColor(1,1,1)
+				.setAlignment("center-center")
+				.setTranslation(300,390);
+				
+			var noaccess = contents.createChild("image")
+					.setFile("Textures/Splash1.png")
+					.setSize(256,256)
+					.setTranslation(172,110);
+					
+			settimer(func() {		
+				noaccess.setFile("gui/merlion/noaccess.png");
+			},0.25);
+		
+		} else {
+		
+			if(getprop("/acars/flight/ready-pirep") != 1) {
+			
+				# Finish Flight First
+				var finFlightText = contents.createChild("text")
+					.setText("You must be logged in to continue, please login and re-open ACARS Portal...")
+					.setText("Please complete your flight and hit the 'End Flight' button on the ACARS Portal.")
+					.setFontSize(16)
+					.setFont("Helvetica.txf")
+					.setColor(1,1,1)
+					.setAlignment("center-center")
+					.setTranslation(300,390);
+				
+				var noaccess = contents.createChild("image")
+						.setFile("Textures/Splash1.png")
+						.setSize(256,256)
+						.setTranslation(172,110);
+						
+				settimer(func() {
+					noaccess.setFile("gui/merlion/noaccess.png");
+				},0.25);
+				
+			
+			} else {
+			
+				# File Pilot Report
+	
+				createText(contents, "Completed Flight Information", 20)
+					.setTranslation(10,100);
+					
+				drawLine(contents, 10, 110, 590, 110, [1,1,1,0.5], 1);
+				
+				createText(contents, "Schedule Information: "~getprop("/acars/flight/flightnum")~" from "~getprop("/acars/flight/departure")~" to "~getprop("/acars/flight/destination"), 18).setTranslation(10,130);
+				
+				var zuluTime = func(timeSec, sep) {
+					var hrs = timeSec / 3600;
+					var min = int((hrs - int(hrs))*60);
+				
+					if(min < 10) {
+						min = '0'~min;
+					}
+					if(min < 1) {
+						min = '00';
+					}
+					
+					hrs = int(hrs);
+					
+					if(hrs < 10) {
+						hrs = '0'~hrs;
+					}
+					if(hrs < 1) {
+						hrs = '00';
+					}
+				
+					return hrs~sep~min;
+				}
+				
+				var startTime = getprop("/acars/flight/start-time");
+				var endTime = getprop("/acars/flight/end-time");
+				var startFuel = getprop("/acars/flight/start-fuel");
+				var endFuel = getprop("/acars/flight/end-fuel");
+				
+				var flightTimeSec = endTime - startTime;
+				if(flightTimeSec <= 0) {
+					flightTimeSec += 86400;
+				}
+				
+				var flightTime = zuluTime(flightTimeSec,':');
+				var startTimeZ = zuluTime(startTime,'');
+				var endTimeZ = zuluTime(endTime,'');
+				
+				var fuelUsed = int(startFuel - endFuel);
+				
+				createText(contents, "Flight Time: "~flightTime~" hrs", 18).setTranslation(10,150);
+				createText(contents, "Fuel Used: "~fuelUsed~" kg", 18).setTranslation(10,170);
+				
+				createText(contents, "Actual Departure Time: "~startTimeZ~" UTC", 18).setTranslation(10,190);
+				
+				createText(contents, "Actual Arrival Time: "~endTimeZ~" UTC", 18).setTranslation(10,210);
+				
+				createText(contents, "Number of ACARS Transmissions: "~getprop("/acars/flight/trans-count"), 18).setTranslation(10,230);
+				
+				createText(contents, "Last Transmitted ACARS Message: "~getprop("/acars/transmit-msg"), 18).setTranslation(10,250);
+				
+				var submitButton = pirep.createGroup();
+				
+				submitButton.createChild("path")
+						.setColor(0.5,0.5,0.5,0.2)
+						.setStrokeLineWidth(1)
+						.moveTo(10, 370)
+						.line(580, 0)
+						.line(0, 24)
+						.line(-580, 0)
+						.line(0, -24)
+						.setColorFill(0.8,0.8,0.8,0.1);
+						
+				createText(submitButton, "Submit Pilot Report", 18)
+					.setTranslation(300,383)
+					.setAlignment("center-center");
+						
+				submitButton.addEventListener("click", func(e) {
+						
+						# Send data to website
+						
+						var targetnode = "/acars/server-response";
+						
+						var bookingid = getprop("/acars/server-response/booking/id");
+		
+						var authkey = getprop("/acars/server-response/auth/key");
+						
+						var url = "http://flymerlion.org/fgapi/filePirep/"~bookingid~"/"~authkey~"/"~zuluTime(flightTimeSec,'.')~"/"~fuelUsed;
+						
+						var args = props.Node.new({
+							'url' : url,
+							'targetnode' : targetnode
+						});
+						
+						fgcommand("xmlhttprequest", args);
+
+						setprop("/acars/flight/ready-pirep", 0);
+						setprop("/acars/flight/trans-count", 0);
+						
+						setprop("/acars/server-response/auth/pilot/flights", getprop("/acars/server-response/auth/pilot/flights") + 1);
+						setprop("/acars/server-response/auth/pilot/hours", getprop("/acars/server-response/auth/pilot/hours") + zuluTime(flightTimeSec,'.'));
+						
+						submitButton.removeAllChildren();
+						contents.removeAllChildren();
+						
+						createText(contents, "Pilot Report Filed Successfully!", 22)
+							.setTranslation(300,235)
+							.setAlignment("center-center");
+						
+				});
+						
+			
+			}
+		
+		}
+		
+		]]></load>
+		</nasal>
+	</canvas>
+  
+</PropertyList>

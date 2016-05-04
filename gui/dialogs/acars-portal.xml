@@ -1,0 +1,881 @@
+<?xml version="1.0"?>
+
+<PropertyList>
+	<name>acars-portal</name>
+	<modal>false</modal>
+	<layout>vbox</layout>
+	<resizable>false</resizable>
+	<default-padding>3</default-padding>
+	
+	<color>
+        <red type="float">0.1</red>
+        <green type="float">0.1</green>
+        <blue type="float">0.1</blue>
+        <alpha type="float">0.7</alpha>
+    </color>
+
+	<group>
+		<layout>hbox</layout>
+		<default-padding>1</default-padding>
+
+		<empty>
+		  <stretch>true</stretch>
+		</empty>
+
+		<text>
+		  <label>Merlion Virtual Airlines | ACARS Portal</label>
+		</text>
+
+		<empty>
+		  <stretch>true</stretch>
+		</empty>
+
+		<button>
+		  <legend/>
+		  <key>Esc</key>
+		  <pref-width>16</pref-width>
+		  <pref-height>16</pref-height>
+		  <border>2</border>
+		  <binding>
+			<command>dialog-close</command>
+		  </binding>
+		</button>
+	</group>
+
+	<hrule/>
+
+	<canvas>
+		<name>merlion-acars</name>
+		<valign>fill</valign>
+		<halign>fill</halign>
+		<stretch>true</stretch>
+		<pref-width>600</pref-width>
+		<pref-height>400</pref-height>
+		<nasal>      
+		<load><![CDATA[
+		
+		var first = 0;
+
+		var acars = canvas.get(cmdarg());
+		var root = acars.createGroup();
+		var contents = acars.createGroup();
+		var refButton = acars.createGroup();
+		var flightDat = acars.createGroup();
+		var button = acars.createGroup();
+		
+		var round2 = func(val) {
+			var intVal = int(val);
+			var decVal = int((val - intVal)*100);
+			return intVal ~ '.' ~ decVal;
+		}
+		
+		acars.setColorBackground(0.1,0.1,0.1,0.7);
+		
+		var banner = root.createChild("image")
+				.setFile("Textures/Splash1.png")
+				.setSize(600,75)
+				.setTranslation(2,1);
+				
+		settimer(func() {
+			banner.setFile("gui/merlion/banner.png")
+		},1);
+			
+		var auth = 0;	
+		if(getprop("/acars/server-response/auth/code") == 1) {
+			auth = getprop("/acars/server-response/auth/pilot/id");
+		}
+		
+		var createText = func(group, text, size) {
+			var m = group.createChild("text")
+						.setText(text)
+						.setFontSize(size)
+						.setFont("Helvetica.txf")
+						.setColor(1,1,1);
+			return m;
+		};
+		
+		var createFplnText = func(group, text, size) {
+			var m = group.createChild("text")
+						.setText(text)
+						.setFontSize(size)
+						.setFont("Helvetica.txf")
+						.setColor(0,0,0);
+			return m;
+		};
+		
+		var drawLine = func(group, startx, starty, endx, endy, color, width) {
+			var m = group.createChild("path")
+						.setColor(color)
+						.setStrokeLineWidth(width)
+						.moveTo(startx,starty)
+						.lineTo(endx, endy);
+			return m;
+		};
+		
+		var round = func(val) {
+			return (int(val*100)/100);
+		};
+		
+		var getFTime = func(flight) {
+			var dep = flight.getNode("deptime").getValue();
+			var arr = flight.getNode("arrtime").getValue();
+			
+			var depHrs = substr(dep,0,2);
+			var depMin = substr(dep,2,2);
+			var arrHrs = substr(arr,0,2);
+			var arrMin = substr(arr,2,2);
+			
+			var FTimeHrs = int(arrHrs) - int(depHrs);
+			var FTimeMin = int(arrMin) - int(depMin);
+			
+			if(FTimeHrs < 0) {
+				FTimeHrs += 24;
+			}
+			
+			if(FTimeMin < 0) {
+				FTimeMin += 60;
+				FTimeHrs -= 1;
+			}
+			
+			if(FTimeMin < 10) {
+				FTimeMin = '0'~int(FTimeMin);
+			} elsif(FTimeMin < 1) {
+				FTimeMin = '00';
+			}
+			
+			return int(FTimeHrs)~':'~FTimeMin;
+		}
+		
+		var genBookFlight = func(first,i,flightDat,ctlGroup)  {
+			createText(flightDat, "[Book]", 18)
+						.setTranslation(540, 202 + (18*i))
+						.addEventListener("click", func(e) {
+							flightDat.removeAllChildren();
+							ctlGroup.removeAllChildren();
+							bookFlight(first + i);
+						});
+		}
+		
+		var updateFlights = func(first, ctlGroup, status) {
+		
+			status.setText("Showing Search Results...");
+		
+			var srcTree = props.globals.getNode("/acars/server-response/search/");
+			
+			flightDat.removeAllChildren();
+			ctlGroup.removeAllChildren();
+			var count = srcTree.getNode("count").getValue();
+			var results = srcTree.getNode("results", 1);
+			
+			drawLine(flightDat, 10, 186, 590, 186, [1,1,1,0.3], 1);
+			
+			createText(flightDat, "Flight No.     Dep/Time        Dest/Time    A/C Reg.   Flt Time", 18)
+				.setTranslation(10, 180);
+			
+			var lim = 10;
+			if(count - first < 10) {
+				lim = count - first;
+			}
+			
+			for(var i=0; i<lim; i+=1) {
+				var flight = results.getChild("flight", first + i);
+				# Format => MIA1627    DEP WMKK/0215 UTC    ARR WSSS/0315 UTC   EST TIME 1:00 hrs    A/C REG 9V-RCH          [Book Flight]
+				createText(flightDat, flight.getNode("airline").getValue() ~ flight.getNode("flightnum").getValue(), 18)
+					.setTranslation(10, 200 + (18*i));
+				createText(flightDat, xmlHTTP_acars.closestAirport() ~ "/" ~ flight.getNode("deptime").getValue(), 18)
+					.setTranslation(90, 202 + (18*i));
+				createText(flightDat, flight.getNode("arricao").getValue() ~ "/" ~ flight.getNode("arrtime").getValue(), 18)
+					.setTranslation(226, 202 + (18*i));
+				createText(flightDat, flight.getNode("registration").getValue(), 18)
+					.setTranslation(358, 202 + (18*i));
+				createText(flightDat, getFTime(flight)~' hrs', 18)
+					.setTranslation(446, 202 + (18*i));
+				
+				genBookFlight(first,i,flightDat,ctlGroup);
+				
+			}
+			
+			if(count > first + 10) {
+				# Next Page Button
+				ctlGroup.createChild("path")
+						.setColor(0.2,0.2,0.2)
+						.setStrokeLineWidth(1)
+						.moveTo(530,134)
+						.line(60,0)
+						.line(0,24)
+						.line(-60,0)
+						.line(0,-24)
+						.setColorFill(0.12,0.12,0.12);
+						
+				createText(ctlGroup, "Next", 18)
+						.setTranslation(545,151)
+						.addEventListener("click", func(e) {
+							updateFlights(first+10,ctlGroup,status);
+						});
+
+			}
+			
+			if(first > 0) {
+				# Prev Page Button
+				ctlGroup.createChild("path")
+						.setColor(0.2,0.2,0.2)
+						.setStrokeLineWidth(1)
+						.moveTo(466,134)
+						.line(60,0)
+						.line(0,24)
+						.line(-60,0)
+						.line(0,-24)
+						.setColorFill(0.12,0.12,0.12);
+				
+				createText(ctlGroup, "Prev", 18)
+						.setTranslation(481,151)
+						.addEventListener("click", func(e) {
+							updateFlights(first-10,ctlGroup,status);
+						});
+			}
+		};
+		
+		var acarsMainPage = func() {
+			contents.removeAllChildren();
+			button.removeAllChildren();
+					
+			if(getprop("/acars/fpln-filed") == 1) {
+			
+				createText(contents, "Flight Tracking and Data Transmission Control", 22).setTranslation(10,100);
+				drawLine(contents, 10, 110, 590, 110, [1,1,1,0.3], 1);
+			
+				createText(contents, "Current Flight - "~getprop("/acars/flight/flightnum")~" from "~getprop("/acars/flight/departure")~" to "~getprop("/acars/flight/destination"), 18).setTranslation(10,130);
+				
+				createText(contents, "Last ACARS Message: " ~getprop("/acars/transmit-msg"), 18).setTranslation(10,150);
+				
+				if(getprop("/acars/flight/trans-count") > 0) {
+				
+				createText(contents, "Last Transmission Time: " ~getprop("/acars/last-tx-utc")~" UTC", 18).setTranslation(10,170);
+				
+				createText(contents, "Number of Transmission: " ~getprop("/acars/flight/trans-count"), 18).setTranslation(10,190);
+				
+				createText(contents, "Last Transmitted Position Data - ", 22).setTranslation(10,230);
+				
+				drawLine(contents, 10, 240, 590, 240, [1,1,1,0.3], 1);
+				
+				var latitude = getprop("/position/latitude-deg");
+				if(latitude >= 0) {
+					latitude = latitude ~ ' N';
+				} else {
+					latitude = math.abs(latitude)~' S';
+				}
+				
+				var longitude = getprop("/position/longitude-deg");
+				if(longitude >= 0) {
+					longitude = longitude ~ ' E';
+				} else {
+					longitude = math.abs(longitude)~' W';
+				}
+				
+				var heading = int(getprop("/orientation/heading-magnetic-deg"));
+				
+				var altitude = getprop("/instrumentation/altimeter/indicated-altitude-ft");
+				if(altitude == nil) {
+					altitude = getprop("/position/altitude-ft");
+				} elsif(altitude < 18000) {
+					altitude = getprop("/position/altitude-ft");
+				}
+				
+				var groundspeed = int(getprop("/velocities/groundspeed-kt"));
+				
+				createText(contents, "Latitude: " ~latitude, 18).setTranslation(10,260);
+				createText(contents, "Longitude: " ~longitude, 18).setTranslation(10,280);
+				createText(contents, "Heading: " ~heading, 18).setTranslation(10,300);
+				createText(contents, "Altitude: " ~int(altitude)~" ft", 18).setTranslation(10,320);
+				createText(contents, "Groundspeed: " ~groundspeed~" knots" , 18).setTranslation(10,340);
+				
+				}
+				
+			
+				button.createChild("path")
+					.setColor(0.2,0.2,0.2)
+					.setStrokeLineWidth(1)
+					.moveTo(10,370)
+					.line(580,0)
+					.line(0,24)
+					.line(-580,0)
+					.line(0,-24)
+					.setColorFill(0.12,0.12,0.12);
+				if(getprop("/acars/active") == 1) {
+					createText(button, "END FLIGHT", 18)
+						.setTranslation(300, 382)
+						.setAlignment("center-center")
+						.addEventListener("click",func(e) {
+						setprop("/acars/active", 0);
+						setprop("/acars/fpln-filed", 0);
+						var utc = getprop("/sim/time/utc/day-seconds") - getprop("/sim/time/warp");
+						if(utc > 86400) {
+							utc -= 86400;
+						}
+						if(utc < 0) {
+							utc += 86400;
+						}
+						setprop("/acars/flight/end-time", utc);
+						setprop("/acars/flight/ready-pirep", 1);
+						setprop("/acars/flight/end-fuel", getprop("/consumables/fuel/total-fuel-kg"));
+						contents.removeAllChildren();
+						button.removeAllChildren();
+						createText(contents, "File your Pilot Report using the 'File Pilot Report' menu item under 'Merlion'", 18).setTranslation(300,240).setAlignment("center-center");
+						createText(contents, "We hope you had a pleasant flight!", 18).setTranslation(300,220).setAlignment("center-center");
+						});
+				} else {	
+					createText(button, "START FLIGHT", 18)
+						.setTranslation(300, 382)
+						.setAlignment("center-center")
+						.addEventListener("click",func(e) {
+							setprop("/acars/active", 1);
+							var utc = getprop("/sim/time/utc/day-seconds") - getprop("/sim/time/warp");
+							if(utc > 86400) {
+								utc -= 86400;
+							}
+							if(utc < 0) {
+								utc += 86400;
+							}
+							setprop("/acars/flight/start-time", utc);
+							setprop("/acars/flight/start-fuel", getprop("/consumables/fuel/total-fuel-kg"));
+							acarsMainPage();
+						});
+				}
+			} else {
+				
+			}
+					
+			#button.createPath
+			
+			# Refresh page in 30 seconds if ACARS is active
+			if(getprop("/acars/active") == 1) {
+				settimer(func() {
+					if(contents != nil) {
+						acarsMainPage();
+					}
+				}, 30);
+			}
+		}
+		
+		var findReplace = func(str) {
+			for(var n=0; n<size(str); n+=1) {
+				if((chr(str[n]) == ",") or (chr(str[n]) == " ")) {
+					str = substr(str, 0, n) ~ "%20" ~ substr(str, n+1);
+				} 
+			}
+			return str;
+		}
+		
+		var bookFlight = func(id) {
+			contents.removeAllChildren();
+			refButton.removeAllChildren();
+			
+			var results = props.globals.getNode("/acars/server-response/search/results");
+			var flight = results.getChild("flight", id);
+			
+			var fpln = contents.createChild("image")
+				.setFile("Textures/Splash1.png")
+				.setSize(600,322)
+				.setTranslation(2,78);
+			# Create Pre-filled data fields
+			
+			settimer(func() {
+				fpln.setFile("gui/merlion/flightplan.png");
+			},1);
+			
+			var airline = "Merlion Intl. Flight ";
+			if(flight.getNode("airline").getValue() == "MCA") {
+				airline = "Merlion Cargo Flight ";
+			}
+
+			createFplnText(contents, airline ~ flight.getNode("flightnum").getValue(), 20)
+				.setTranslation(166,96)
+				.setAlignment("left-center");
+
+			createFplnText(contents, flight.getNode("registration").getValue(), 20)
+				.setTranslation(93,139)
+				.setAlignment("center-center");
+				
+			createFplnText(contents, substr(xmlHTTP_acars.aircraftType(),0,9), 20)
+				.setTranslation(182,139)
+				.setAlignment("center-center");
+				
+			createFplnText(contents, xmlHTTP_acars.closestAirport(), 28)
+				.setTranslation(346,136)
+				.setAlignment("center-center");
+				
+			createFplnText(contents, substr(flight.getNode("deptime").getValue(),0,4), 22)
+				.setTranslation(436,142)
+				.setAlignment("center-center");
+				
+			createFplnText(contents, substr(flight.getNode("arricao").getValue(),0,4), 28)
+				.setTranslation(68,278)
+				.setAlignment("center-center");
+				
+			createFplnText(contents, substr(flight.getNode("flighttime").getValue(),0,2), 24)
+				.setTranslation(156,282)
+				.setAlignment("center-center");
+				
+			createFplnText(contents, substr(flight.getNode("flighttime").getValue(),2,2), 24)
+				.setTranslation(212,282)
+				.setAlignment("center-center");
+				
+			createFplnText(contents, substr(getprop("/acars/server-response/auth/pilot/code") ~ " - " ~ getprop("/acars/server-response/auth/pilot/name"),0,33), 18)
+				.setTranslation(248,318)
+				.setAlignment("left-center");
+				
+			createFplnText(contents, "Merlion Dispatch Center", 18)
+				.setTranslation(248,350)
+				.setAlignment("left-center");
+				
+			createFplnText(contents, "White / Blue", 18)
+				.setTranslation(74,382)
+				.setAlignment("center-center");
+				
+			# Text Boxes
+			var textboxes = acars.createGroup();
+			var textboxArray = [];
+			var listener = nil;
+			
+			
+			var genTextBox = func(m) {
+			
+				m.canvasbox.setColor(0.5,0.5,0.5,0.2)
+							.setStrokeLineWidth(1)
+							.moveTo(m.left, m.top)
+							.line(m.length, 0)
+							.line(0, m.height)
+							.line(-m.length, 0)
+							.line(0, -m.height)
+							.setColorFill(0.8,0.8,0.8,0.1)
+							.addEventListener("click", func(e) {
+					
+					foreach(var box; textboxArray) {
+						box.canvasbox.setColorFill(0.8,0.8,0.8,0.1);
+					}
+					
+					if(listener != nil) {
+						removelistener(listener);
+					}
+					
+					m.canvasbox.setColorFill(1,0,0,0.1);
+					
+					# setprop("/acars/textbox/active", m.id);
+					# setprop("/acars/textbox/text", m.text);
+					
+					listener = setlistener("/devices/status/keyboard/event", func(event) {
+						if (!event.getNode("pressed").getValue())
+							return;
+						var key = event.getNode("key");
+						var shift = event.getNode("modifier/shift").getValue();
+						if (m.handle_key(key.getValue(), shift))
+							key.setValue(-1);
+         
+         			});
+					
+				});
+			};
+			
+			var textbox = {
+				id: "",
+				left: 0,
+				top: 0,
+				length: 0,
+				height: 0,
+				text: "",
+				update: func() {
+					me.canvastext.setText(me.text);
+				},
+				addChar: func(char) {
+					me.text ~= char;
+					me.update();
+				},
+				removeChar: func() {
+					me.text = substr(me.text, 0, size(me.text) - 1);
+					me.update();
+				},
+				handle_key: func(char) {
+					if(char == 8)
+						me.removeChar();
+					else
+						me.addChar(chr(char));
+					return 1;
+				},
+				canvasbox: nil,
+				canvastext: nil,
+				new: func(id, left, top, length, height, fontsize, align) {
+					var m = {parents: [textbox]};
+					m.id = id;
+					m.left = left;
+					m.top = top;
+					m.length = length;
+					m.height = height;			
+					
+					m.canvasbox = textboxes.createChild("path");					
+					
+					m.canvastext = textboxes.createChild("text")
+											.setText("")
+											.setFontSize(fontsize)
+											.setFont("Helvetica.txf")
+											.setColor(0,0,0)
+											.setAlignment(align);
+								
+					if(align == "center-center") {
+						m.canvastext.setTranslation(left + (length/2), top + (height/2));
+					} else {
+						m.canvastext.setTranslation(left + 6, top + (height/2));
+					}
+								
+								
+					return m;
+				}
+			};
+			
+			append(textboxArray, textbox.new("tas",231,125,54,27,20,"center-center"));
+			append(textboxArray, textbox.new("actualDep",472,131,55,21,20,"center-center"));
+			append(textboxArray, textbox.new("crz",532, 125,64,27,20,"center-center"));
+			append(textboxArray, textbox.new("rte1",10,166,585,23,20,"left-center"));
+			append(textboxArray, textbox.new("rte2",10,189,585,23,20,"left-center"));
+			append(textboxArray, textbox.new("rte3",10,212,585,22,20,"left-center"));
+			append(textboxArray, textbox.new("rem1",241,250,355,22,20,"left-center"));
+			append(textboxArray, textbox.new("rem2",241,273,355,22,20,"left-center"));
+			append(textboxArray, textbox.new("fobHrs",9,325,45,30,24,"center-center"));
+			append(textboxArray, textbox.new("fobMin",60,325,45,30,24,"center-center"));
+			append(textboxArray, textbox.new("altn",111,310,125,47,24,"center-center"));
+			append(textboxArray, textbox.new("souls",535,320,61,35,24,"center-center"));
+			
+			var flightType = "ifr";
+			
+			var vfr = contents.createChild("path")
+								.setColor(0.4,0.4,0.4)
+								.setStrokeLineWidth(1)
+								.moveTo(9,120)
+								.line(9,0)
+								.line(0,8)
+								.line(-9,0)
+								.line(0,-8)
+								.setColorFill(0,0,0,0.01);
+								
+			var ifr = contents.createChild("path")
+								.setColor(0.4,0.4,0.4)
+								.setStrokeLineWidth(1)
+								.moveTo(9,132)
+								.line(9,0)
+								.line(0,8)
+								.line(-9,0)
+								.line(0,-8)
+								.setColorFill(0,0,0,0.5);
+								
+			vfr.addEventListener("click", func(e) {
+				vfr.setColorFill(0,0,0,0.5);
+				ifr.setColorFill(0,0,0,0.01);
+				flightType = "vfr";
+			});
+			
+			ifr.addEventListener("click", func(e) {
+				ifr.setColorFill(0,0,0,0.5);
+				vfr.setColorFill(0,0,0,0.01);
+				flightType = "ifr";
+			});
+			
+			var actype = xmlHTTP_acars.aircraftType();
+			
+			var acDat = {
+				"ATR72-500C":	[260, 285, 170, 250, 2],
+				"CRJ-200":		[345, 455, 270, 370, 42],				
+				"ERJ-170":		[355, 415, 240, 330, 58],
+				"CRJ700" :		[365, 445, 260, 350, 64],
+				"ERJ-190":		[360, 420, 250, 330, 72],
+				"A320neo":		[375, 465, 270, 370, 154],
+				"757-200PF":	[365, 465, 250, 310, 3],
+				"A330-243":		[375, 475, 280, 350, 253],
+				"A330-343":		[375, 475, 280, 350, 286],
+				"787-8":		[375, 475, 280, 370, 242],
+				"777-200F":		[375, 475, 280, 350, 3],
+				"777-200ER":	[375, 475, 280, 350, 304],
+				"777-200LR":	[375, 475, 280, 350, 291],
+				"777-300ER":	[380, 480, 270, 350, 375],
+				"A380":			[380, 480, 270, 350, 518]
+			};
+			
+			var autoFill = {
+				tas: func() {
+					if(substr(flight.getNode("flighttime").getValue(),0,2) == "00") {
+						return acDat[actype][0];
+					} else {
+						return acDat[actype][1];
+					}				
+				},
+				actualDep: func() {
+					var utc = getprop("/sim/time/utc/day-seconds") - getprop("/sim/time/warp");
+					
+					if(utc < 0) {
+						utc += 86400;
+					} elsif(utc > 86400) {
+						utc -= 86400;
+					}
+					
+					var utcHrs = utc/3600;
+					var utcMin = (utcHrs - int(utcHrs)) * 60;
+					
+					var utchrs = int(utcHrs);
+					if(utchrs < 1) {
+						utchrs = '00';
+					} elsif(utchrs < 10) {
+						utchrs = '0'~utchrs;
+					}
+		
+					var utcmin = int(utcMin);
+					if(utcmin < 1) {
+						utcmin = '00';
+					} elsif(utcmin < 10) {
+						utcmin = '0'~utcmin;
+					}
+					
+					return utchrs~utcmin;
+				},
+				crz: func() {
+					if(substr(flight.getNode("flighttime").getValue(),0,2) == "00") {
+						return "FL"~ acDat[actype][2];
+					} else {
+						return "FL"~ acDat[actype][3];
+					}
+				},
+				rte1: func() {
+					return "Not Filed/VFR";
+				},
+				rte2: func() {
+					return "";
+				},
+				rte3: func() {
+					return "";
+				},
+				rem1: func() {
+					return "";
+				},
+				rem2: func() {
+					return "";
+				},
+				fobHrs: func() {
+					if(substr(flight.getNode("flighttime").getValue(),0,2) == "00") {
+						return substr(flight.getNode("flighttime").getValue(),0,2) + 1;
+					} else {
+						return substr(flight.getNode("flighttime").getValue(),0,2) + 2;
+					}
+				},
+				fobMin: func() {
+					return substr(flight.getNode("flighttime").getValue(),2,2);
+				},
+				altn: func() {
+					return "Not Filed";
+				},
+				souls: func() {
+					return acDat[actype][4];
+				}
+			};
+			
+			foreach(var tb; textboxArray) {
+				genTextBox(tb);
+			}
+			
+			var fileButton = acars.createGroup();
+			
+			fileButton.createChild("path")
+						.setColor(0.2,0.2,0.2)
+						.setStrokeLineWidth(1)
+						.moveTo(390,362)
+						.line(206,0)
+						.line(0,31)
+						.line(-206,0)
+						.line(0,-31)
+						.setColorFill(0.12,0.12,0.12,0.6);
+						
+			createText(fileButton, "File Flightplan", 24)
+				.setTranslation(432,386);
+				
+			fileButton.addEventListener("click", func(e) {
+				var fnum = flight.getNode("flightnum").getValue();
+				var txtValues = {};
+				foreach(var textBox; textboxArray) {
+					if(textBox.text == "") {
+						txtValues[textBox.id] = autoFill[textBox.id]();
+					} else {
+						txtValues[textBox.id] = textBox.text;
+					}
+				}
+				
+				if(listener != nil) {
+					removelistener(listener);
+				}
+				
+				# Format = http://flymerlion.org/fgapi/bookFlight/pid/key/fnum/type/tas/actualDep/crz/rte/rem/fobHrs/fobMin/atln/souls
+				
+				var url = "http://flymerlion.org/fgapi/bookFlight/"~substr(getprop("/acars/server-response/auth/pilot/code"),3,4)~"/"~getprop("/acars/server-response/auth/key")~"/"~fnum~"/"~flightType~"/"~txtValues.tas~"/"~txtValues.actualDep~"/"~txtValues.crz~"/"~findReplace(txtValues.rte1~" "~txtValues.rte2~" "~txtValues.rte3)~"/"~findReplace(txtValues.rem1~" "~txtValues.rem2)~"/"~txtValues.fobHrs~"/"~txtValues.fobMin~"/"~findReplace(txtValues.altn)~"/"~txtValues.souls;
+				
+				setprop("/acars/flight/route", txtValues.rte1~" "~txtValues.rte2~" "~txtValues.rte3);
+				
+				print(url);
+				
+				var targetnode = "/acars/server-response/";
+				
+				var args = props.Node.new({
+					"url" : url,
+					"targetnode" : targetnode
+				});
+				fgcommand("xmlhttprequest", args);
+				
+				textboxes.removeAllChildren();
+				fileButton.removeAllChildren();
+				contents.removeAllChildren();
+				refButton.removeAllChildren();
+				
+				settimer(func() {
+					if(getprop("/acars/server-response/booking/code") == 1) {
+						setprop("/acars/flight/flightnum", flight.getNode("airline").getValue()~flight.getNode("flightnum").getValue());
+						setprop("/acars/flight/departure", xmlHTTP_acars.closestAirport());
+						setprop("/acars/flight/destination", flight.getNode("arricao").getValue());
+						setprop("/acars/fpln-filed", 1);
+						acarsMainPage();
+					} else {
+						# Request pilot to log in
+						var noauthText = contents.createChild("text")
+							.setText("Your authentication key seems to be denied, please login again to continue.")
+							.setFontSize(16)
+							.setFont("Helvetica.txf")
+							.setColor(1,1,1)
+							.setTranslation(60,390);
+				
+						var noaccess = contents.createChild("image")
+							.setFile("Textures/Splash1.png")
+							.setSize(256,256)
+							.setTranslation(172,110);
+							}
+							
+						settimer(func() {
+							noaccess.setFile("gui/merlion/noaccess.png");
+						},1);
+				}, 3);
+				
+			});
+				
+			fpln.addEventListener("click", func(e) {
+				print(e.clientX~", "~e.clientY);
+			});
+		}
+		
+		var startPage = func() {
+			var user = xmlHTTP_acars.getUser();
+			contents.removeAllChildren();
+			
+			var rank = contents.createChild("image")
+					.setFile("Textures/Splash1.png")
+					.setSize(80,32)
+					.setTranslation(10,90);
+			
+			settimer(func() {
+				rank.setFile("gui/merlion/ranks/"~user.rank~".png");
+			},1);
+			
+			var hub = contents.createChild("image")
+					.setFile("Textures/Splash1.png")
+					.setSize(80,32)
+					.setTranslation(10,124);
+			
+			settimer(func() {		
+				hub.setFile("gui/merlion/hubs/"~user.hub~".png");
+			},1);
+			
+			createText(contents, user.code ~ " - " ~ user.name, 18)
+				.setTranslation(100,100);
+			createText(contents, "Pilot Rank: "~user.rank, 18)
+				.setTranslation(100,118);	
+			createText(contents, "No. of Flights: "~user.flights, 18)
+				.setTranslation(100,136);
+			createText(contents, "Total Hours: "~round2(user.hours), 18)
+				.setTranslation(100,154);
+				
+			drawLine(contents, 10, 162, 590, 162, [1,1,1,0.5], 1);
+			
+			drawLine(contents, 10, 370, 590, 370, [1,1,1,0.5], 1);
+			
+			var status = createText(contents, "Connected to Merlion Dispatch...",18)
+							.setTranslation(10,394);
+			
+			refButton.createChild("path")
+								.setColor(0.2,0.2,0.2)
+								.setStrokeLineWidth(1)
+								.moveTo(390,376)
+								.line(200,0)
+								.line(0,24)
+								.line(-200,0)
+								.line(0,-24)
+								.setColorFill(0.12,0.12,0.12);
+								
+			createText(refButton, "Search for Flights", 18)
+				.setTranslation(426,394);
+			
+			var results = acars.createGroup();
+			var ctrlbuttons = acars.createGroup();
+			
+			var msg = acars.createGroup();
+			
+			refButton.addEventListener("click", func(e) {
+				var depicao = xmlHTTP_acars.closestAirport();
+				var actype = xmlHTTP_acars.aircraftType();
+				status.setText("Looking for flights from "~depicao~"...");
+				xmlHTTP_acars.getFlights();
+				settimer(func() {
+					if(getprop("/acars/server-response/search/code") == 1) {
+						msg.removeAllChildren();
+						updateFlights(first, ctrlbuttons, status);
+					} else {
+						status.setText("No Flights Found! Try the website first?");
+						createText(msg, "We don't fly from "~depicao~" with the "~actype~".",18)
+							.setTranslation(10,180);
+						createText(msg, "Try looking for available flights at our website first.", 18)
+							.setTranslation(10,198);
+					} 
+				}, 3);
+			});
+				
+		};
+		
+		# Load Page
+		
+		if(auth == 0) {
+			# Request pilot to log in
+			var noauthText = contents.createChild("text")
+				.setText("You must be logged in to continue, please login and re-open ACARS Portal...")
+				.setFontSize(16)
+				.setFont("Helvetica.txf")
+				.setColor(1,1,1)
+				.setTranslation(60,390);
+				
+			var noaccess = contents.createChild("image")
+					.setFile("Textures/Splash1.png")
+					.setSize(256,256)
+					.setTranslation(172,110);
+				
+			settimer(func() {	
+				noaccess.setFile("gui/merlion/noaccess.png");
+			},1);
+					
+		} else {
+		
+			var callsign = getprop("/acars/server-response/auth/pilot/code");
+				
+			setprop("/sim/multiplay/callsign", callsign);
+			
+			if(getprop("/acars/fpln-filed") == 1) {
+				acarsMainPage();
+			} else {
+				startPage();
+			}
+			
+		}
+
+		]]></load>
+		</nasal>
+	</canvas>
+  
+</PropertyList>

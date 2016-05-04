@@ -1,0 +1,55 @@
+<?xml version="1.0"?>
+<PropertyList>
+	
+	<menu n="50">
+		<label>Merlion</label>
+
+		<item>
+			<label>Browse Website</label>
+			<binding>
+				<command>open-browser</command>
+				<path>http://flymerlion.org</path>
+			</binding>
+		</item>
+		<item>
+			<label>Browse Forum</label>
+			<binding>
+				<command>open-browser</command>
+				<path>http://flymerlion.org/flightdeck/forum</path>
+			</binding>
+		</item>
+		<item>
+			<label>View ACARS Map</label>
+			<binding>
+				<command>open-browser</command>
+				<path>http://flymerlion.org/flightdeck/tracker</path>
+			</binding>
+		</item>
+		<item>
+			<label>----------------</label>
+			<enabled>false</enabled>
+		</item>
+		<item>
+			<label>Pilot Login</label>
+			<binding>
+				<command>dialog-show</command>
+				<dialog-name>merlion-login</dialog-name>
+			</binding>
+		</item>
+		<item>
+			<label>ACARS Portal</label>
+			<binding>
+				<command>dialog-show</command>
+				<dialog-name>acars-portal</dialog-name>
+			</binding>
+		</item>
+		<item>
+			<label>File Pilot Report</label>
+			<binding>
+				<command>dialog-show</command>
+				<dialog-name>file-pirep</dialog-name>
+			</binding>
+		</item>
+	</menu>
+
+</PropertyList>

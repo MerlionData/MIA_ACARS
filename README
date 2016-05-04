@@ -1,0 +1,64 @@
+======================= ABOUT ========================
+
+Version - v1.0 alpha
+Platform - Cross-platform
+
+FlightGear Requirements -
+	> FG v2.10+ (v2.12 recommended)
+	> Must support xmlHTTPrequest fgcommand
+	> Must support canvas properties
+	
+xmlHTTPrequest and canvas have been included in FG2.10
+and future developments.
+
+====================== INSTALL =======================
+
+Move Contents (gui and Nasal folders) into your $FGDATA
+directory and merge the folders.
+
+===================== CHANGELOG ======================
+
+08172013 > Split into windows and unix versions
+08172013 > Merlion Menu added with nasal
+08162013 > Initial alpha test version
+
+======================= FILES ========================
+
+-+-> $FGDATA
+ |
+ |-+-> gui
+ | |
+ | |---> merlion.xml
+ | |-+-> dialogs
+ |   |
+ |   |---> acars-portal.xml
+ |   |---> file-pirep.xml
+ |   |---> merlion-login.xml
+ |
+ |-+-> Nasal
+   |
+   |---> xmlHTTP_acars.nas
+   |-+-> merlion
+     |
+     |---> banner.png
+     |---> banner-pirep.png
+     |---> flightplan.png
+     |---> noaccess.png
+     |-+-> hubs
+     | |
+     | |---> EGKK.png
+     | |---> KLAX.png
+     | |---> WSSS.png
+     |
+     |-+-> ranks
+       |
+       |---> Trainee.png
+       |---> CAT-I Pilot.png
+       |---> CAT-II Pilot.png
+       |---> CAT-III Pilot.png
+       |---> Junior First Officer.png
+       |---> Senior First Offcer.png
+       |---> Junior Flight Captain.png
+       |---> Senior Flight Captain.png
+       |---> Commercial Commander.png
+       |---> Senior Commander.png
